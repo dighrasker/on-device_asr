@@ -68,6 +68,12 @@ object WhisperBridge {
     }
 
     // ======= JNI declarations (private) =======
+    init {
+        // this must match the name in add_library(...)
+        System.loadLibrary("whisper_jni")
+        // if you also link against c++_shared, you might need:
+        // System.loadLibrary("c++_shared")
+    }
     private external fun nativeInit(modelPath: String, nThreads: Int): Long
     private external fun nativeRunInference(ctxHandle: Long, pcm: FloatArray): String
     private external fun nativeFree(ctxHandle: Long)
