@@ -1,6 +1,7 @@
 #include <jni.h>               // Core JNI types & helpers
 #include <android/log.h>       // Logcat output
 #include "whisper.h"           // Whisper C API (pulled in via sub‑module)
+#include <string>
 
 // ─── Log helpers ──────────────────────────────────────────────────────
 #define TAG "WhisperJNI"
@@ -40,7 +41,10 @@ Java_com_example_my_1app_WhisperBridge_nativeInit(
     }
 
     // Load model
-    whisper_context* ctx = whisper_init_from_file(path.ptr);
+    whisper_context* ctx = whisper_init_from_file_with_params(
+            path.ptr,
+            whisper_context_default_params()
+    );
     if (!ctx) {
         LOGE("Failed to load model at %s", path.ptr);
         return 0;
@@ -97,8 +101,19 @@ Java_com_example_my_1app_WhisperBridge_nativeRunInference(
     }
 
     // Collect transcription (all segments concatenated)
-    const char* text = whisper_full_str(ctx);
-    return env->NewStringUTF(text ? text : "");
+    //const char* text = whisper_full_str(ctx);
+    //return env->NewStringUTF(text ? text : "");
+
+    int n_seg = whisper_full_n_segments(ctx);
+    std::string result;
+    result.reserve(n_seg * 32); // optional—avoid tiny reallocs
+    for (int i = 0; i < n_seg; ++i) {
+            const char* seg = whisper_full_get_segment_text(ctx, i);
+            if (seg && *seg) {
+                result += seg;
+            }
+    }
+    return env->NewStringUTF(result.c_str());
 }
 
 // ──────────────────────────────────────────────────────────────────────

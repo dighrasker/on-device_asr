@@ -16,8 +16,21 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        externalNativeBuild {
+            cmake {
+                // Build only arm64 for now
+                abiFilters.add("arm64-v8a")
+                // Forward runtime args into CMake if you wish
+                arguments.add("-DWHISPER_CORE=0")
+            }
+        }
     }
-
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")   // <—  path relative to build.gradle
+            version = "3.22.1"
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -57,6 +70,8 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+    implementation ("androidx.activity:activity-ktx:1.9.0")
     implementation("androidx.activity:activity-compose:1.10.1") // For Composable Activities
     implementation("androidx.compose.foundation:foundation:1.8.3")
 
