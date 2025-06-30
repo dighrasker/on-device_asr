@@ -9,8 +9,16 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Neon / fp16 for modern 64-bit devices
 if (ANDROID)
-    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -O3 -march=armv8.2-a+fp16")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=armv8.2-a+fp16")
+  # arm64-v8a devices get Neon+fp16
+  if(CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    set(ARCH_FLAGS "-O3 -march=armv8.2-a+fp16")
+  else()
+    # x86, x86_64, armeabi-v7a: just optimize
+    set(ARCH_FLAGS "-O3")
+  endif()
+
+  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   ${ARCH_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ARCH_FLAGS}")
 endif()
 
 # ==== 3. Configure the *upstream* project ====

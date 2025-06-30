@@ -19,7 +19,7 @@ android {
         externalNativeBuild {
             cmake {
                 // Build only arm64 for now
-                abiFilters.add("arm64-v8a")
+                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
                 // Forward runtime args into CMake if you wish
                 arguments.add("-DWHISPER_CORE=0")
             }
