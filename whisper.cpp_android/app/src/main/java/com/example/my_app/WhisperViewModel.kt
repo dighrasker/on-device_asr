@@ -71,7 +71,7 @@ class WhisperViewModel : ViewModel() {
 
                 // 2) Configure microphone (16‑kHz, mono, PCM‑16)
 
-                val sampleRate = 16_000
+                val sampleRate = 16000
                 val minBuf = AudioRecord.getMinBufferSize(
                     sampleRate,
                     AudioFormat.CHANNEL_IN_MONO,
@@ -87,7 +87,7 @@ class WhisperViewModel : ViewModel() {
 
                 // 3) Launch worker coroutine to pull audio & forward to Whisper
                 micJob = launch(Dispatchers.Default) {
-                    val shortBuf = ShortArray(sampleRate / 50) // ~20 ms buffer
+                    val shortBuf = ShortArray(sampleRate) // ~20 ms buffer
                     val floatBuf = FloatArray(shortBuf.size)
 
                     while (_isRecording.value &&
