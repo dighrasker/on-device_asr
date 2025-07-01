@@ -2,6 +2,15 @@
 cmake_minimum_required(VERSION 3.22)  # AGP 8.x ships 3.22+
 project(whisper_android LANGUAGES C CXX)
 
+ # ==== Disable f16/SIMD on emulator ABIs ====
+ if(ANDROID AND (CMAKE_ANDROID_ARCH_ABI STREQUAL "x86" OR CMAKE_ANDROID_ARCH_ABI STREQUAL "x86_64"))
+   message(STATUS "Building for ${CMAKE_ANDROID_ARCH_ABI}: disabling ggml f16/SIMD kernels")
+   # Disable the f16-optimized paths in ggml
+   add_definitions(-DGGML_NO_F16)
+   # Or, if you prefer the CMake cache knob:
+   # set(GGML_SIMD none CACHE STRING "" FORCE)
+ endif()
+
 # ==== 2. Global compile options ====
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
