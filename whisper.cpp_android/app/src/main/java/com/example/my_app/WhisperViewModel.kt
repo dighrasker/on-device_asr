@@ -159,6 +159,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * ViewModel that glues the Compose UI to the native whisper.cpp engine
@@ -191,10 +194,7 @@ class WhisperViewModel : ViewModel() {
      * @param assetModelPath path inside /assets that contains the GGML model
      */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun startRecording(
-        context: Context,
-        assetModelPath: String = "models/ggml-tiny.bin"
-    ) {
+    fun startRecording (context: Context, assetModelPath: String = "models/ggml-tiny.bin") {
         if (_isRecording.value) return
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
@@ -216,7 +216,7 @@ class WhisperViewModel : ViewModel() {
                 val modelPath = WhisperBridge.ensureModel(context, assetModelPath)
                 println("[DEBUG] startRecording: model copied to $modelPath")
                 withContext(Dispatchers.Default) {
-                    val initSuccess = WhisperBridge.init(modelPath)
+                    val initSuccess = WhisperBridge.init(modelPath, 1)
                     println("[DEBUG] startRecording: WhisperBridge.init returned $initSuccess")
                     check(initSuccess) { "Model failed to load" }
                 }
@@ -243,7 +243,7 @@ class WhisperViewModel : ViewModel() {
 
                 // ─────────────── 1) capture coroutine ───────────────
                 captureJob = launch(Dispatchers.IO) {
-                    val shortBuf = ShortArray(sampleRate * 1)   // 250 ms frame
+                    val shortBuf = ShortArray(sampleRate)
                     val floatBuf = FloatArray(shortBuf.size)
                     println("[DEBUG] captureJob: buffers of size ${shortBuf.size} initialized")
                     Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
@@ -253,6 +253,7 @@ class WhisperViewModel : ViewModel() {
                         val n = recorder?.read(shortBuf, 0, shortBuf.size) ?: break
                         println("[DEBUG] captureJob: read $n samples")
                         if (n > 0) {
+                            println("[DEBUG] sample[0..4] = ${floatBuf.take(5)}")
                             for (i in 0 until n) floatBuf[i] = shortBuf[i] / 32768f
                             println("[DEBUG] captureJob: converted to floatBuf sample[0]=${floatBuf[0]}")
                             frameChan?.trySend(floatBuf.copyOf()).also {
@@ -264,12 +265,25 @@ class WhisperViewModel : ViewModel() {
                 }
 
                 // ────────────── 2) inference coroutine ──────────────
+                // ────────────── 2) inference coroutine ──────────────
                 inferJob = launch(Dispatchers.Default) {
                     frameChan?.let { chan ->
+                        val windowSize = sampleRate * 3               // e.g. 16 000 * 3 = 48 000 samples
+                        val ring = ArrayDeque<Float>(windowSize)
+
                         for (frame in chan) {
-                            val text = WhisperBridge.transcribe(frame)
-                            if (text.isNotBlank()) {
-                                _transcript.value += text
+                            // 1) Append the new frame
+                            frame.forEach { ring.addLast(it) }
+                            // 2) Drop oldest samples so ring.size ≤ windowSize
+                            while (ring.size > windowSize) ring.removeFirst()
+
+                            // 3) Only transcribe once we have a full 3 s of audio
+                            if (ring.size == windowSize) {
+                                val recentSamples = ring.toFloatArray()
+                                val text = WhisperBridge.transcribe(recentSamples)
+                                if (text.isNotBlank()) {
+                                    _transcript.value += text
+                                }
                             }
                         }
                     }
@@ -281,6 +295,49 @@ class WhisperViewModel : ViewModel() {
                 stopRecording()   // ensure clean‑up on failure
             }
         }
+    }
+
+    fun transcribeFile(context: Context, assetFileName: String = "jfk.wav") {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Ensure model is loaded
+                val modelPath = WhisperBridge.ensureModel(context, "models/ggml-tiny.bin")
+                val initSuccess = withContext(Dispatchers.Default) {
+                    WhisperBridge.init(modelPath, 1)
+                }
+                check(initSuccess) { "Model failed to load" }
+
+                // 2. Load audio file from assets
+                val inputStream = context.assets.open(assetFileName)
+                val pcmData = decodeWavToFloatArray(inputStream)
+
+                // 3. Run Whisper
+                val text = withContext(Dispatchers.Default) {
+                    WhisperBridge.transcribe(pcmData)
+                }
+
+                _transcript.value += text
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+
+    fun decodeWavToFloatArray(input: InputStream): FloatArray {
+        val header = ByteArray(44)
+        input.read(header)
+
+        val audioData = input.readBytes()
+        val shortBuffer = ByteBuffer.wrap(audioData)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .asShortBuffer()
+
+        val floatArray = FloatArray(shortBuffer.limit())
+        for (i in floatArray.indices) {
+            floatArray[i] = shortBuffer.get(i) / 32768f
+        }
+
+        return floatArray
     }
 
     /** Stop the ongoing transcription session and free resources. */
@@ -313,141 +370,3 @@ class WhisperViewModel : ViewModel() {
 
     fun setError(message: String) { _error.value = message }
 }
-
-
-//package com.example.my_app
-//
-//import android.Manifest
-//import android.content.Context
-//import android.content.pm.PackageManager
-//import android.media.AudioFormat
-//import android.media.AudioRecord
-//import android.media.MediaRecorder
-//import android.os.Process
-//import androidx.annotation.RequiresPermission
-//import androidx.core.content.ContextCompat
-//import androidx.lifecycle.ViewModel
-//import androidx.lifecycle.viewModelScope
-//import kotlinx.coroutines.*
-//import kotlinx.coroutines.channels.Channel
-//import kotlinx.coroutines.flow.MutableStateFlow
-//import kotlinx.coroutines.flow.StateFlow
-//
-///**
-// * ViewModel with streaming inference: 1s capture frames, 25s rolling context, 1s hop
-// */
-//class WhisperViewModel : ViewModel() {
-//
-//    // UI state
-//    private val _isRecording = MutableStateFlow(false)
-//    val isRecording: StateFlow<Boolean> get() = _isRecording
-//
-//    private val _transcript = MutableStateFlow("")
-//    val transcript: StateFlow<String> get() = _transcript
-//
-//    private val _error = MutableStateFlow<String?>(null)
-//    val error: StateFlow<String?> get() = _error
-//
-//    // internal
-//    private var recorder: AudioRecord? = null
-//    private var captureJob: Job? = null
-//    private var inferJob: Job? = null
-//    private var frameChan: Channel<FloatArray>? = null
-//
-//    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-//    fun startRecording(
-//        context: Context,
-//        assetModelPath: String = "models/ggml-base.en.bin"
-//    ) {
-//        if (_isRecording.value) return
-//        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-//            != PackageManager.PERMISSION_GRANTED) {
-//            _error.value = "Microphone permission not granted"
-//            return
-//        }
-//        _isRecording.value = true
-//        frameChan = Channel(capacity = 4)
-//
-//        viewModelScope.launch {
-//            try {
-//                // load model
-//                val modelPath = WhisperBridge.ensureModel(context, assetModelPath)
-//                withContext(Dispatchers.Default) {
-//                    check(WhisperBridge.init(modelPath)) { "Model failed to load" }
-//                }
-//
-//                // audio config
-//                val sampleRate = 16000
-//                val minBuf = AudioRecord.getMinBufferSize(
-//                    sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-//                recorder = AudioRecord(
-//                    MediaRecorder.AudioSource.MIC,
-//                    sampleRate,
-//                    AudioFormat.CHANNEL_IN_MONO,
-//                    AudioFormat.ENCODING_PCM_16BIT,
-//                    minBuf * 4
-//                ).apply { startRecording() }
-//
-//                // capture 1s frames
-//                captureJob = launch(Dispatchers.IO) {
-//                    val shortBuf = ShortArray(sampleRate * 1)
-//                    val floatBuf = FloatArray(shortBuf.size)
-//                    Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
-//                    while (isActive && recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-//                        val n = recorder?.read(shortBuf, 0, shortBuf.size) ?: break
-//                        if (n > 0) {
-//                            for (i in 0 until n) floatBuf[i] = shortBuf[i] / 32768f
-//                            frameChan?.send(floatBuf.copyOf())
-//                        }
-//                    }
-//                }
-//
-//                // streaming inference: 25s ring buffer, 1s hop
-//                inferJob = launch(Dispatchers.Default) {
-//                    val ctxSec = 25
-//                    val hopSec = 1
-//                    val ctxSamples = sampleRate * ctxSec
-//                    val hopSamples = sampleRate * hopSec
-//                    val ring = FloatArray(ctxSamples)
-//                    var writePos = 0
-//                    var filled = 0
-//
-//                    val chan = frameChan ?: return@launch
-//                    for (frame in chan) {
-//                        // write frame into ring
-//                        System.arraycopy(frame, 0, ring, writePos, frame.size)
-//                        writePos = (writePos + frame.size) % ctxSamples
-//                        filled = minOf(filled + frame.size, ctxSamples)
-//
-//                        // every hopSec seconds, decode
-//                        if (filled == ctxSamples && (filled % hopSamples) == 0) {
-//                            val ordered = if (writePos == 0) ring
-//                            else ring.copyOfRange(writePos, ctxSamples) + ring.copyOfRange(0, writePos)
-//                            val text = WhisperBridge.transcribe(ordered)
-//                            if (text.isNotBlank()) _transcript.value += text
-//                        }
-//                    }
-//                }
-//
-//            } catch (t: Throwable) {
-//                _error.value = t.message
-//                _isRecording.value = false
-//                stopRecording()
-//            }
-//        }
-//    }
-//
-//    fun stopRecording() {
-//        if (!_isRecording.value) return
-//        _isRecording.value = false
-//        captureJob?.cancel()
-//        inferJob?.cancel()
-//        recorder?.run { stop(); release() }
-//        recorder = null
-//        frameChan?.close()
-//        viewModelScope.launch(Dispatchers.Default) { WhisperBridge.close() }
-//    }
-//
-//    fun clearTranscript() { _transcript.value = "" }
-//    override fun onCleared() { stopRecording() }
-//}
