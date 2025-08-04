@@ -104,13 +104,13 @@ Java_com_example_my_1app_WhisperBridge_nativeRunInference(
     // Collect transcription (all segments concatenated)
     //const char* text = whisper_full_str(ctx);
     //return env->NewStringUTF(text ? text : "");
-    LOGI("BELLOO1: %p", ctx);
+    //LOGI("BELLOO1: %p", ctx);
     int n_seg = whisper_full_n_segments(ctx);
     std::string result;
     result.reserve(n_seg * 32); // optional—avoid tiny reallocs
-    LOGI("n_seg: %d", n_seg); //surprisingly empty
+    //LOGI("n_seg: %d", n_seg); //surprisingly empty
     for (int i = 0; i < n_seg; ++i) {
-        LOGI("BELLOO2: %p", ctx);
+        //LOGI("BELLOO2: %p", ctx);
             const char* seg = whisper_full_get_segment_text(ctx, i);
             if (seg && *seg) {
                 result += seg;

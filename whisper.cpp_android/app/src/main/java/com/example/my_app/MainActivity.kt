@@ -56,7 +56,7 @@ fun RecordingAppUI(viewModel: WhisperViewModel) {
     var expanded by remember { mutableStateOf(false) }
     var selectedFile by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
-        context.assets.list("")
+        context.assets.list("samples")
             ?.filter { it.endsWith(".wav") }
             ?.let { files ->
                 assetFiles = files
@@ -187,7 +187,7 @@ fun RecordingAppUI(viewModel: WhisperViewModel) {
                     }
                 }
                 Button(
-                    onClick = { viewModel.transcribeFile(context, selectedFile) },
+                    onClick = { viewModel.transcribeFile(context, selectedFile) }, //jump off point
                     enabled = !isRecording && selectedFile.isNotEmpty()
                 ) {
                     Text("Transcribe File")

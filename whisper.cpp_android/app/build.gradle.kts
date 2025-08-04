@@ -64,6 +64,8 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
+    implementation ("com.github.psambit9791:TarsosDSP:2.4")
+    implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
     implementation("androidx.compose.material3:material3:1.3.2")
     implementation("androidx.compose.material3:material3-window-size-class:1.3.2")
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.4.0-alpha16")

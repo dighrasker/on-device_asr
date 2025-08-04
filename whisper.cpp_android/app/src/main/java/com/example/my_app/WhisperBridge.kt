@@ -36,13 +36,14 @@ object WhisperBridge {
         return ctxHandle != 0L
     }
 
+
     /**
      * Feed one block of 16‑kHz mono PCM (float ‑1.0..1.0) and receive the
      * decoded text. Returns an empty string on error or no speech.
      */
     fun transcribe(pcm: FloatArray): String {
         if (ctxHandle == 0L) return ""            // not ready
-        return nativeRunInference(ctxHandle, pcm)
+        return nativeRunInference(ctxHandle, pcm) //jump off point
     }
 
     /** Release native resources. */

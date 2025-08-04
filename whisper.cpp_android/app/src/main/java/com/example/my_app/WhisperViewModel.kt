@@ -1,6 +1,7 @@
 package com.example.my_app
 
 import android.Manifest
+import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioFormat
@@ -11,6 +12,7 @@ import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -19,13 +21,17 @@ import kotlinx.coroutines.flow.StateFlow
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.floor
+import kotlin.math.min
+import java.io.ByteArrayOutputStream
+import java.io.File
 
 /**
  * ViewModel that glues the Compose UI to the native whisper.cpp engine
  * via WhisperBridge.  It now decouples audio capture from inference to
  * avoid buffer overruns on slower devices/emulators.
  */
-class WhisperViewModel : ViewModel() {
+class WhisperViewModel(private val app: Application): AndroidViewModel(app){
 
     // ────────────────────── State exposed to the UI ──────────────────────
     private val _isRecording = MutableStateFlow(false)
@@ -42,6 +48,8 @@ class WhisperViewModel : ViewModel() {
     private var captureJob: Job? = null
     private var inferJob: Job? = null
     private var frameChan: Channel<FloatArray>? = null
+    private val modelsPath = File(app.filesDir, "models")
+    private val samplesPath = File(app.filesDir, "samples")
 
     /**
      * Begin real‑time transcription. Safe to call multiple times; a second
@@ -154,7 +162,7 @@ class WhisperViewModel : ViewModel() {
         }
     }
 
-    fun transcribeFile(context: Context, assetFileName: String = "jfk.wav") {
+    fun transcribeFile(context: Context, assetFileName: String = "1jfk.wav") {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // 1. Ensure model is loaded
@@ -164,14 +172,22 @@ class WhisperViewModel : ViewModel() {
                 }
                 check(initSuccess) { "Model failed to load" }
 
+                Log.d("Dhruv", "Bello1")
+                copyAssets()
                 // 2. Load audio file from assets
                 Log.d("Dhruv", "$assetFileName")
-                val inputStream = context.assets.open(assetFileName)
-                val pcmData = decodeWavToFloatArray(inputStream)
+                //val inputStream = context.assets.open(assetFileName)
 
+
+                val wavFile = File(samplesPath, assetFileName)
+                Log.d("Dhruv", "wavFile: $wavFile")
+                val pcmData = decodeWaveFile(wavFile)//decodeWavToFloatArray(inputStream)
+
+
+                Log.d("Dhruv", "pcmData: ${pcmData.contentToString()}")
                 // 3. Run Whisper
                 val text = withContext(Dispatchers.Default) {
-                    WhisperBridge.transcribe(pcmData)
+                    WhisperBridge.transcribe(pcmData) //jump off point
                 }
                 Log.d("Dhruv", " $text")
                 _transcript.value += text
@@ -181,22 +197,175 @@ class WhisperViewModel : ViewModel() {
         }
     }
 
-    fun decodeWavToFloatArray(input: InputStream): FloatArray {
-        val header = ByteArray(44)
-        input.read(header)
-
-        val audioData = input.readBytes()
-        val shortBuffer = ByteBuffer.wrap(audioData)
-            .order(ByteOrder.LITTLE_ENDIAN)
-            .asShortBuffer()
-
-        val floatArray = FloatArray(shortBuffer.limit())
-        for (i in floatArray.indices) {
-            floatArray[i] = shortBuffer.get(i) / 32768f
-        }
-
-        return floatArray
+    private suspend fun copyAssets() = withContext(Dispatchers.IO) {
+        Log.d("Dhruv", "entered copyAssets")
+        modelsPath.mkdirs()
+        samplesPath.mkdirs()
+        //application.copyData("models", modelsPath, ::printMessage)
+        app.copyData("samples", samplesPath)
+        Log.d("Dhruv", "Finished copyAssets")
     }
+
+    fun decodeWaveFile(file: File): FloatArray {
+
+        //Read bytes into a byte buffer
+        val baos = ByteArrayOutputStream()
+        file.inputStream().use { it.copyTo(baos) }
+        val buffer = ByteBuffer.wrap(baos.toByteArray())
+        buffer.order(ByteOrder.LITTLE_ENDIAN)
+
+        // reading the header
+        val channel = buffer.getShort(22).toInt()
+        buffer.position(24)
+        val originalRate = buffer.int
+        Log.d("Dhruv", "WAV sampleRate = $originalRate, channels = $channel")
+
+        //Jump to PCM data, view as shorts
+        buffer.position(44)
+        val shortBuffer = buffer.asShortBuffer()
+        val shortArray = ShortArray(shortBuffer.limit())
+        shortBuffer.get(shortArray)
+        //Log.d("Dhruv", "shortBuffer: ${shortArray.contentToString()}")
+
+        //change data type and numChannels as needed
+        val rawFloats =  FloatArray(shortArray.size / channel) { index ->
+            when (channel) {
+                1 -> (shortArray[index] / 32767.0f).coerceIn(-1f..1f)
+                else -> ((shortArray[2*index] + shortArray[2*index + 1])/ 32767.0f / 2.0f).coerceIn(-1f..1f)
+            }
+        }
+        Log.d("Dhruv", "rawFloats size=${rawFloats.size}, head=${rawFloats.take(10)}")
+        val targetRate = 16_000
+        Log.d("Dhruv", "returning rawFloats")
+        return rawFloats
+    }
+
+    private suspend fun Context.copyData(
+        assetDirName: String,
+        destDir: File
+    ) = withContext(Dispatchers.IO) {
+        Log.d("Dhruv", "Entering copyData")
+        assets.list(assetDirName)?.forEach { name ->
+            val assetPath = "$assetDirName/$name"
+            Log.v("Dhruv", "Processing $assetPath...")
+            val destination = File(destDir, name)
+            Log.v("Dhruv", "Copying $assetPath to $destination...")
+            assets.open(assetPath).use { input ->
+                destination.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Log.v("Dhruv", "Copied $assetPath to $destination")
+        }
+    }
+
+    //DOES NOT HANDLE ALL USE CASES YET
+//    fun decodeWavToFloatArray(input: InputStream): FloatArray {
+//        val audioData = input.readBytes()
+//        val header = ByteBuffer.wrap(audioData, 0, 44)
+//            .order(ByteOrder.LITTLE_ENDIAN)
+//
+//        //reading header for useful information
+//
+//        val audioFormat   = header.getShort(20).toInt()      // 1=PCM, 3=Float
+//        val numChannels   = header.getShort(22).toInt()
+//        val sampleRate    = header.getInt(24)
+//        val bitsPerSample = header.getShort(34).toInt()
+//        Log.d("Dhruv", "$bitsPerSample")
+//
+//        val pcmStart = 44
+//        val pcmBytes = audioData.copyOfRange(pcmStart, audioData.size)
+//        Log.d("Dhruv", "fmt=0x%04x rate=%d bits=%d".format(audioFormat, sampleRate, bitsPerSample))
+//        if (audioFormat == 3) { // ADDED
+//            val floatBuffer = ByteBuffer.wrap(pcmBytes)       // ADDED
+//                .order(ByteOrder.LITTLE_ENDIAN)               // ADDED
+//                .asFloatBuffer()                              // ADDED
+//
+//            val totalSamples = floatBuffer.limit()            // ADDED
+//            val monoFloats = if (numChannels == 1) {          // ADDED
+//                FloatArray(totalSamples) { i ->               // ADDED
+//                    floatBuffer.get(i)                        // ADDED
+//                }                                             // ADDED
+//            } else {                                          // ADDED
+//                require(totalSamples % 2 == 0) {              // ADDED
+//                    "Stereo data must have even number of samples"
+//                }                                             // ADDED
+//                val monoSamples = totalSamples / 2            // ADDED
+//                FloatArray(monoSamples) { i ->                // ADDED
+//                    val left  = floatBuffer.get(i * 2)        // ADDED
+//                    val right = floatBuffer.get(i * 2 + 1)    // ADDED
+//                    (left + right) / 2f                      // ADDED
+//                }                                             // ADDED
+//            }                                                 // ADDED
+//
+//            if (sampleRate == 16_000) return monoFloats       // ADDED
+//
+//            // ADDED: resample to 16 kHz (same logic as PCM path)
+//            val dstRate = 16_000                              // ADDED
+//            val lengthInSeconds = monoFloats.size.toDouble() / sampleRate // ADDED
+//            val outSize = (lengthInSeconds * dstRate).toInt() // ADDED
+//            val ratio = sampleRate.toDouble() / dstRate       // ADDED
+//            val reSampledFloats = FloatArray(outSize)         // ADDED
+//
+//            for (i in 0 until outSize) {                      // ADDED
+//                val srcIndex = i * ratio                      // ADDED
+//                val i0 = floor(srcIndex).toInt().coerceIn(0, monoFloats.lastIndex) // ADDED
+//                val i1 = min(i0 + 1, monoFloats.lastIndex)    // ADDED
+//                val frac = (srcIndex - i0).toFloat()          // ADDED
+//                reSampledFloats[i] = monoFloats[i0] * (1 - frac) + monoFloats[i1] * frac // ADDED
+//            }                                                 // ADDED
+//
+//            return reSampledFloats                            // ADDED
+//        } // ADDED
+//
+//        //little endian format if needed
+//        val shortBuffer = ByteBuffer.wrap(pcmBytes)
+//            .order(ByteOrder.LITTLE_ENDIAN)
+//            .asShortBuffer()
+//
+//        val totalSamples = shortBuffer.limit()
+//        val monoFloats: FloatArray
+//
+//        //collapsing stereo to mono if needed + right dtype
+//        if (numChannels == 1) {
+//            // Mono – convert directly
+//            monoFloats = FloatArray(totalSamples) { i ->
+//                shortBuffer.get(i) / 32768f
+//            }
+//        } else if (numChannels == 2) {
+//            // Stereo – average left and right channels
+//            require(totalSamples % 2 == 0) { "Stereo data must have even number of samples" }
+//            val monoSamples = totalSamples / 2
+//            monoFloats = FloatArray(monoSamples) { i ->
+//                val left = shortBuffer.get(i * 2).toFloat()
+//                val right = shortBuffer.get(i * 2 + 1).toFloat()
+//                ((left + right) / 2f) / 32768f
+//            }
+//        } else {
+//            throw IllegalArgumentException("Unsupported number of channels: $numChannels")
+//        }
+//
+//        if (sampleRate == 16_000) return monoFloats
+//
+//        //resampling if needed
+//        val dstRate = 16_000
+//        val lengthInSeconds = monoFloats.size.toDouble() /sampleRate
+//        val outSize = (lengthInSeconds * dstRate).toInt()
+//        val ratio = sampleRate.toDouble() / dstRate
+//        val reSampledFloats = FloatArray(outSize)
+//
+//        for (i in 0 until outSize) {
+//            val srcIndex = i * ratio
+//            val i0 = floor(srcIndex).toInt().coerceIn(0, monoFloats.lastIndex)
+//            val i1 = min(i0 + 1, monoFloats.lastIndex)
+//            val frac = (srcIndex - i0).toFloat()
+//            reSampledFloats[i] = monoFloats[i0] * (1 - frac) + monoFloats[i1] * frac
+//        }
+//
+//        return reSampledFloats
+//
+//    }
+
 
     /** Stop the ongoing transcription session and free resources. */
     fun stopRecording() {
