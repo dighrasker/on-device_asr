@@ -97,14 +97,13 @@ fun RecordingAppUI(viewModel: WhisperViewModel) {
                 },
                 enabled = !isRecording
             ) {
-                Text("Start Recording")
-            }
-
-            Button(
-                onClick = { viewModel.stopRecording() },
-                enabled = isRecording
-            ) {
-                Text("Stop Recording")
+                Text(
+                    if (isRecording) {
+                        "Stop Recording"
+                    } else {
+                        "Start Recording"
+                    }
+                )
             }
 
             // Row: dropdown selector + transcribe file button

@@ -14,6 +14,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+//import be.tarsos.dsp.AudioDispatcher
+//import be.tarsos.dsp.AudioDispatcherFactory
+//import be.tarsos.dsp.AudioEvent
+//import be.tarsos.dsp.AudioProcessor
+//import be.tarsos.dsp.resample.RateTransposer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,19 +75,16 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
         }
 
         _isRecording.value = true
-        println("[DEBUG] startRecording: _isRecording set to true")
+
         frameChan = Channel(capacity = 4) // 4 * 250 ms ring buffer
-        println("[DEBUG] startRecording: frameChan initialized with capacity 4")
+
 
         viewModelScope.launch {
             try {
                 // 1) Copy model from assets (first launch only) & load it
-                println("[DEBUG] startRecording: ensuring model at $assetModelPath")
                 val modelPath = WhisperBridge.ensureModel(context, assetModelPath)
-                println("[DEBUG] startRecording: model copied to $modelPath")
                 withContext(Dispatchers.Default) {
                     val initSuccess = WhisperBridge.init(modelPath, 1)
-                    println("[DEBUG] startRecording: WhisperBridge.init returned $initSuccess")
                     check(initSuccess) { "Model failed to load" }
                 }
 
@@ -181,6 +183,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
 
                 val wavFile = File(samplesPath, assetFileName)
                 Log.d("Dhruv", "wavFile: $wavFile")
+
                 val pcmData = decodeWaveFile(wavFile)//decodeWavToFloatArray(inputStream)
 
 
@@ -225,7 +228,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
         val shortBuffer = buffer.asShortBuffer()
         val shortArray = ShortArray(shortBuffer.limit())
         shortBuffer.get(shortArray)
-        //Log.d("Dhruv", "shortBuffer: ${shortArray.contentToString()}")
+        Log.d("Dhruv", "shortBuffer: ${shortArray.contentToString()}")
 
         //change data type and numChannels as needed
         val rawFloats =  FloatArray(shortArray.size / channel) { index ->
