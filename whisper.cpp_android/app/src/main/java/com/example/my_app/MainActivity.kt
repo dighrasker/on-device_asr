@@ -85,113 +85,6 @@ fun RecordingAppUI(viewModel: WhisperViewModel) {
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Button(
-                onClick = {
-                    if (ContextCompat.checkSelfPermission(
-                            context, Manifest.permission.RECORD_AUDIO
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        viewModel.clearTranscript()
-                        viewModel.startRecording(context)
-                    } else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                },
-                enabled = !isRecording
-            ) {
-                Text(
-                    if (isRecording) {
-                        "Stop Recording"
-                    } else {
-                        "Start Recording"
-                    }
-                )
-            }
-
-            // Row: dropdown selector + transcribe file button
-//            Row(
-//                verticalAlignment = Alignment.CenterVertically,
-//                horizontalArrangement = Arrangement.spacedBy(8.dp),
-//                modifier = Modifier.fillMaxWidth()
-//            ) {
-//                // Stable dropdown implementation
-//                Box(
-//                    modifier = Modifier
-//                        .weight(1f)
-//                        .wrapContentSize(Alignment.TopStart)
-//                ) {
-//                    OutlinedTextField(
-//                        value = selectedFile,
-//                        onValueChange = {},
-//                        readOnly = true,
-//                        label = { Text("Audio File") },
-//                        modifier = Modifier
-//                            .fillMaxWidth()
-//                            .clickable { expanded = !expanded }
-//                    )
-//                    DropdownMenu(
-//                        expanded = expanded,
-//                        onDismissRequest = { expanded = false }
-//                    ) {
-//                        assetFiles.forEach { file ->
-//                            DropdownMenuItem(
-//                                text = { Text(file) },
-//                                onClick = {
-//                                    selectedFile = file
-//                                    expanded = false
-//                                }
-//                            )
-//                        }
-//                    }
-//                }
-//                Button(
-//                    onClick = { viewModel.transcribeFile(context, selectedFile) },
-//                    enabled = !isRecording && selectedFile.isNotEmpty()
-//                ) {
-//                    Text("Transcribe File")
-//                }
-//            }
-
-            // Row: dropdown selector + transcribe file button
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // make the BOX handle clicks instead of the TextField
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .wrapContentSize(Alignment.TopStart)
-                        .clickable { expanded = !expanded }   // <-- moved here
-                ) {
-                    OutlinedTextField(
-                        value = selectedFile,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Audio File") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        assetFiles.forEach { file ->
-                            DropdownMenuItem(
-                                text = { Text(file) },
-                                onClick = {
-                                    selectedFile = file
-                                    expanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-                Button(
-                    onClick = { viewModel.transcribeFile(context, selectedFile) }, //jump off point
-                    enabled = !isRecording && selectedFile.isNotEmpty()
-                ) {
-                    Text("Transcribe File")
-                }
-            }
 
             // ─── Multiline Transcript display ─────────────────
             OutlinedTextField(
@@ -205,6 +98,51 @@ fun RecordingAppUI(viewModel: WhisperViewModel) {
                     .height(200.dp),
                 label = { Text("Transcript") }
             )
+
+//            Button(
+//                onClick = {
+//                    if (ContextCompat.checkSelfPermission(
+//                            context, Manifest.permission.RECORD_AUDIO
+//                        ) == PackageManager.PERMISSION_GRANTED
+//                    ) {
+//                        viewModel.clearTranscript()
+//                        viewModel.startRecording(context)
+//                    } else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+//                },
+//                enabled = !isRecording
+//            ) {
+//                Text(
+//                    if (isRecording) {
+//                        "Stop Recording"
+//                    } else {
+//                        "Start Recording"
+//                    }
+//                )
+//            }
+
+            Button(
+                onClick = {
+                    if (isRecording) {
+                        viewModel.stopRecording()
+                    } else {
+                        // start path: clear + permission check + start
+                        viewModel.clearTranscript()
+                        if (ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                        ) {
+                            Log.d("Dhruv", "About to start Recording")
+                            viewModel.startRecording(context)
+                        } else {
+                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+                },
+                enabled = true  // always clickable
+            ) {
+                Text(if (isRecording) "Stop Recording" else "Start Recording")
+            }
+
 
             // ─── Error display ──────────────────────
             errorMsg?.let {

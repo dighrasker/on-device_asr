@@ -18,16 +18,32 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Neon / fp16 for modern 64-bit devices
 if (ANDROID)
-  # arm64-v8a devices get Neon+fp16
-  if(CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
-    set(ARCH_FLAGS "-O3 -march=armv8.2-a+fp16")
-  else()
-    # x86, x86_64, armeabi-v7a: just optimize
-    set(ARCH_FLAGS "-O3")
-  endif()
+#  # arm64-v8a devices get Neon+fp16
+#  if(CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+#    set(ARCH_FLAGS "-O3 -march=armv8.2-a+fp16")
+#  else()
+#    # x86, x86_64, armeabi-v7a: just optimize
+#    set(ARCH_FLAGS "-O3")
+#  endif()
+#
+#  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   ${ARCH_FLAGS}")
+#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ARCH_FLAGS}")
 
-  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   ${ARCH_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ARCH_FLAGS}")
+# arm64-v8a devices get Neon+fp16, others just -O3
+   if (CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+#       set(NEON_FLAGS -march=armv8.2-a+fp16)
+        set(NEON_FLAGS " -march=armv8.2-a+fp16")
+   else()
+#       set(NEON_FLAGS)
+        set(NEON_FLAGS "")
+   endif()
+
+   # Always append -O3 as its own flag, then any -march flag separately
+   # list(APPEND) makes each item a separate argument
+#   list(APPEND CMAKE_C_FLAGS   -O3 ${NEON_FLAGS})
+#   list(APPEND CMAKE_CXX_FLAGS -O3 ${NEON_FLAGS})
+    string(APPEND CMAKE_C_FLAGS   " -O3${NEON_FLAGS}")
+    string(APPEND CMAKE_CXX_FLAGS " -O3${NEON_FLAGS}")
 endif()
 
 # ==== 3. Configure the *upstream* project ====
