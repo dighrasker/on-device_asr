@@ -3,6 +3,11 @@ package com.example.my_app
 
 import android.content.Context
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 
 /**
  * Thin, singleton‑style wrapper that hides all JNI details.
@@ -41,17 +46,37 @@ object WhisperBridge {
      * Feed one block of 16‑kHz mono PCM (float ‑1.0..1.0) and receive the
      * decoded text. Returns an empty string on error or no speech.
      */
-    fun transcribe(pcm: FloatArray): String {
-        if (ctxHandle == 0L) return ""            // not ready
-        return nativeRunInference(ctxHandle, pcm) //jump off point
-    }
+    private val inferenceMutex = Mutex()   // ★ new
+
+    /**
+     * Safe wrapper – suspends while another inference is running.
+     */
+    suspend fun transcribe(pcm: FloatArray): String =
+        withContext(Dispatchers.Default) {
+            if (ctxHandle == 0L) return@withContext ""
+            inferenceMutex.withLock {
+                nativeRunInference(ctxHandle, pcm)
+            }
+        }
+//    fun transcribe(pcm: FloatArray): String {
+//        if (ctxHandle == 0L) return ""            // not ready
+//        return nativeRunInference(ctxHandle, pcm) //jump off point
+//    }
 
     /** Release native resources. */
-    @Synchronized
-    fun close() {
-        if (ctxHandle != 0L) {
-            nativeFree(ctxHandle)
-            ctxHandle = 0L
+//    @Synchronized
+//    fun close() {
+//        if (ctxHandle != 0L) {
+//            nativeFree(ctxHandle)
+//            ctxHandle = 0L
+//        }
+//    }
+    suspend fun release() = withContext(Dispatchers.Default) {
+        inferenceMutex.withLock {
+            if (ctxHandle != 0L) {
+                nativeFree(ctxHandle)
+                ctxHandle = 0L
+            }
         }
     }
 

@@ -52,6 +52,7 @@ set(WHISPER_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(whisper.cpp)
+add_definitions(-DGGML_DISABLE_F16)
 
 # ==== 4. Your JNI bridge (one .cpp file for now) ====
 add_library(whisper_jni SHARED whisper_jni.cpp)

@@ -131,7 +131,7 @@ fun RecordingAppUI(viewModel: WhisperViewModel) {
                                 context, Manifest.permission.RECORD_AUDIO
                             ) == PackageManager.PERMISSION_GRANTED
                         ) {
-                            Log.d("Dhruv", "About to start Recording")
+                            //Log.d("Dhruv", "About to start Recording")
                             viewModel.startRecording(context)
                         } else {
                             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)

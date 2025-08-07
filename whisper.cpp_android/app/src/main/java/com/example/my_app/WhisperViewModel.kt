@@ -14,23 +14,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-//import be.tarsos.dsp.AudioDispatcher
-//import be.tarsos.dsp.AudioDispatcherFactory
-//import be.tarsos.dsp.AudioEvent
-//import be.tarsos.dsp.AudioProcessor
-//import be.tarsos.dsp.resample.RateTransposer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.io.InputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import kotlin.math.floor
-import kotlin.math.min
-import java.io.ByteArrayOutputStream
-import java.io.File
-import kotlin.math.absoluteValue
 
 
 /**
@@ -67,7 +54,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
      */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun startRecording (context: Context, assetModelPath: String = "models/ggml-tiny.bin") {
-        Log.d("Dhruv", "Just Entered startRecording")
+        //Log.d("Dhruv", "Just Entered startRecording")
         //if there is already a recording in progress, this prevents another one from starting
         if (_isRecording.value) return
 
@@ -81,7 +68,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
 
         //sets recording flag to true, indicating that recording is in progress
         _isRecording.value = true
-        Log.v("Dhruv", "isRecording.value: $_isRecording")
+        //Log.v("Dhruv", "isRecording.value: $_isRecording")
         //frameChan was declared but never defined
         //this is essentially a fifo of size 4, send() to push and recieve() to pop
         frameChan = Channel(capacity = Channel.UNLIMITED) // 4 * 250 ms ring buffer
@@ -90,15 +77,15 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
         //start a new coroutine to do ASR in the background, tie scope to this viewModel
         viewModelScope.launch {
             try {
-                Log.d("Dhruv", "Just Entered viewModelScope.launch")
+                //Log.d("Dhruv", "Just Entered viewModelScope.launch")
                 // 1) Copy model from assets (first launch only) & load it
                 val modelPath = WhisperBridge.ensureModel(context, assetModelPath)
-                Log.v("Dhruv", "modelPath: $modelPath")
+                //Log.v("Dhruv", "modelPath: $modelPath")
                 //use a seperate dispatcher to ensure heavy duty stuff is being done on a different thread than UI thread
                 withContext(Dispatchers.Default) {
                     //loading model
                     val initSuccess = WhisperBridge.init(modelPath, 1)
-                    Log.v("Dhruv", "initSuccess: $initSuccess")
+                    //Log.v("Dhruv", "initSuccess: $initSuccess")
                     check(initSuccess) { "Model failed to load" }
                 }
                 // 2) Configure microphone (16‑kHz, mono, PCM‑16)
@@ -109,7 +96,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
                     AudioFormat.ENCODING_PCM_16BIT
                 )
 
-                Log.v("Dhruv", "minBuf: $minBuf")
+                //Log.v("Dhruv", "minBuf: $minBuf")
 
                 //creates an instance of AudioRecord and sets recorder equal to that
                 //recorder was declared up top but never defined
@@ -136,20 +123,19 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
                         recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                         val n = recorder?.read(shortBuf, 0, frameSize) ?: break
                         val start = (0 until frameSize - 10).random()
-                        Log.v("Dhruv", "shortBuf[$start..${start+9}]: ${shortBuf.slice(start until start+10)}")
+                        //Log.v("Dhruv", "shortBuf[$start..${start+9}]: ${shortBuf.slice(start until start+10)}")
                         if (n > 0) {
                             for (i in 0 until n) floatBuf[i] = (shortBuf[i] / 32768f).coerceIn(-1f, 1f)
-//                            Log.v("Dhruv", "floatBuf[0..9]: ${floatBuf.take(10)}")
-                            Log.v("Dhruv", "floatBuf[$start..${start+9}]: ${floatBuf.slice(start until start+10)}")
+                            //Log.v("Dhruv", "floatBuf[$start..${start+9}]: ${floatBuf.slice(start until start+10)}")
                             val result = frameChan!!.trySend(floatBuf.copyOf())
-                            Log.v("Dhruv", "trySend -> success=${result.isSuccess}, dropped=${result.isFailure}")
+                            //Log.v("Dhruv", "trySend -> success=${result.isSuccess}, dropped=${result.isFailure}")
                         }
                     }
                 }
 
                 // ────────────── 2) buffer -> whisper ──────────────
                 inferJob = launch(Dispatchers.Default) {
-                    Log.v("Dhruv", "inferJob: I am alive and well")
+                    //Log.v("Dhruv", "inferJob: I am alive and well")
                     frameChan?.let { chan ->
                         val windowSize = sampleRate * 3               // e.g. 16 000 * 3 = 48 000 samples
                         val hopSize    = sampleRate * 3
@@ -158,20 +144,20 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
                         var sinceInfer = 0
                         for (frame in chan) {
                             // 1) Append the new frame
-                            Log.v("Dhruv", "frame: ${frame.take(10)}")
-                            Log.v("Dhruv", "Pulled one frame; ring before append=${ring.size}")
+                            //Log.v("Dhruv", "frame: ${frame.take(10)}")
+                            //Log.v("Dhruv", "Pulled one frame; ring before append=${ring.size}")
                             frame.forEach { ring.addLast(it) }
-                            Log.v("Dhruv", "Ring after append=${ring.size}")
+                            //Log.v("Dhruv", "Ring after append=${ring.size}")
                             // 2) Drop oldest samples so ring.size ≤ windowSize
                             while (ring.size > windowSize) ring.removeFirst()
                             sinceInfer += frame.size
 
-                            Log.v("Dhruv", "Ring after trim=${ring.size}")
+                            //Log.v("Dhruv", "Ring after trim=${ring.size}")
                             // 3) Only transcribe once we have a full 3 s of audio
                             if (ring.size == windowSize && sinceInfer >= hopSize) {
-                                Log.d("Dhruv", "Ring full! calling transcribe()")
+                                //Log.d("Dhruv", "Ring full! calling transcribe()")
                                 val recentSamples = ring.toFloatArray()
-                                Log.d("Dhruv", "recentSamples: ${recentSamples.take(10)}")
+                                //Log.d("Dhruv", "recentSamples: ${recentSamples.take(10)}")
                                 val text = WhisperBridge.transcribe(recentSamples)
                                 if (text.isNotBlank()) {
                                     _transcript.value += text
@@ -183,7 +169,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
                         }
                     }
                 }
-                Log.d("Dhruv", "Exiting startRecording")
+                //Log.d("Dhruv", "Exiting startRecording")
             } catch (t: Throwable) {
                 _error.value = t.message
                 _isRecording.value = false
@@ -197,12 +183,18 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
 
     /** Stop the ongoing transcription session and free resources. */
     fun stopRecording() {
-        Log.d("Dhruv", "Just Entered stopRecording")
         if (!_isRecording.value) return
         _isRecording.value = false
 
         captureJob?.cancel(); captureJob = null
-        inferJob?.cancel();   inferJob   = null
+
+        viewModelScope.launch {
+            inferJob?.cancelAndJoin()
+            inferJob = null
+
+            // Now it is 100 % safe to free the native context
+            WhisperBridge.release()
+        }
 
         recorder?.run {
             try { stop() } catch (_: Exception) {}
@@ -213,8 +205,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
         frameChan?.close(); frameChan = null
 
         // Unload model off the main thread
-        viewModelScope.launch(Dispatchers.Default) { WhisperBridge.close() }
-        Log.d("Dhruv", "Exiting stopRecording")
+        viewModelScope.launch(Dispatchers.Default) { WhisperBridge.release() }
     }
 
     /** Convenience helper to reset the on‑screen transcript. */
