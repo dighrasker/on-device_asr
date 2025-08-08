@@ -53,7 +53,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
      * @param assetModelPath path inside /assets that contains the GGML model
      */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun startRecording (context: Context, assetModelPath: String = "models/ggml-tiny.bin") {
+    fun startRecording (context: Context, lang: String = "auto", translate: Boolean = false, assetModelPath: String = "models/ggml-tiny.bin") {
         //Log.d("Dhruv", "Just Entered startRecording")
         //if there is already a recording in progress, this prevents another one from starting
         if (_isRecording.value) return
@@ -113,7 +113,7 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
 
                 // ─────────────── 1) mic -> buffer ───────────────
                 captureJob = launch(Dispatchers.IO) {
-                    val frameSize = 1024
+                    val frameSize = 8000
                     val shortBuf = ShortArray(frameSize)
                     val floatBuf = FloatArray(frameSize)
 
@@ -137,11 +137,11 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
                 inferJob = launch(Dispatchers.Default) {
                     //Log.v("Dhruv", "inferJob: I am alive and well")
                     frameChan?.let { chan ->
-                        val windowSize = sampleRate * 3               // e.g. 16 000 * 3 = 48 000 samples
-                        val hopSize    = sampleRate * 3
+                        val windowSize = sampleRate * 10              // e.g. 16 000 * 3 = 48 000 samples
+                        val hopSize    = sampleRate * 10
                         val ring = ArrayDeque<Float>(windowSize)
-
                         var sinceInfer = 0
+
                         for (frame in chan) {
                             // 1) Append the new frame
                             //Log.v("Dhruv", "frame: ${frame.take(10)}")
@@ -158,10 +158,37 @@ class WhisperViewModel(private val app: Application): AndroidViewModel(app){
                                 //Log.d("Dhruv", "Ring full! calling transcribe()")
                                 val recentSamples = ring.toFloatArray()
                                 //Log.d("Dhruv", "recentSamples: ${recentSamples.take(10)}")
-                                val text = WhisperBridge.transcribe(recentSamples)
-                                if (text.isNotBlank()) {
-                                    _transcript.value += text
+                                val startIdx = _transcript.value.length
+
+                                launch(Dispatchers.Default) {
+                                    /*val finalText =*/ WhisperBridge.transcribeStreamed(
+                                        recentSamples,
+                                        lang,
+                                        translate,
+                                        onPartial = { seg ->
+                                            // stream partials into the UI
+                                            viewModelScope.launch(Dispatchers.Main) {
+                                                _transcript.value += seg
+                                            }
+                                        }
+                                    )
+
+//                                    // Replace the just-appended tail with the final text (dedupe)
+//                                    viewModelScope.launch(Dispatchers.Main) {
+//                                        val current = _transcript.value
+//                                        // Guard against races (if something else appended later)
+//                                        val safeStart = startIdx.coerceAtMost(current.length)
+//                                        _transcript.value = buildString {
+//                                            append(current, 0, safeStart)
+//                                            append(finalText)
+//                                        }
+//                                    }
                                 }
+
+                                //val text = WhisperBridge.transcribe(recentSamples)
+//                                if (text.isNotBlank()) {
+//                                    _transcript.value += text
+//                                }
 
                                 repeat(hopSize) { if (ring.isNotEmpty()) ring.removeFirst() }
                                 sinceInfer = 0

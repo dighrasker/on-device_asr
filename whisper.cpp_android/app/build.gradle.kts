@@ -57,23 +57,55 @@ android {
 }
 
 dependencies {
+    // --- Compose BOM for 1.7.x family (works with compiler 1.5.15)
+    implementation(platform("androidx.compose:compose-bom:2024.09.02"))
 
+    // Compose artifacts (no versions needed under BOM)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")           // has ExposedDropdownMenu*
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.material:material-icons-extended")
+
+    // Your existing dependencies (keep these)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation(libs.material)
+    implementation(libs.material) // Google's Material Components (not Compose)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
-    implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
-    implementation("androidx.compose.material3:material3:1.3.2")
-    implementation("androidx.compose.material3:material3-window-size-class:1.3.2")
-    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.4.0-alpha16")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+    implementation("androidx.activity:activity-ktx:1.9.0")
+    implementation("androidx.activity:activity-compose:1.10.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
-    implementation ("androidx.activity:activity-ktx:1.9.0")
-    implementation("androidx.activity:activity-compose:1.10.1") // For Composable Activities
-    implementation("androidx.compose.foundation:foundation:1.8.3")
-
 }
+
+
+//dependencies {
+//
+//
+//    implementation(libs.androidx.core.ktx)
+//    implementation(libs.androidx.appcompat)
+//    implementation(libs.material)
+//    implementation(libs.androidx.constraintlayout)
+//    implementation(libs.androidx.navigation.fragment.ktx)
+//    implementation(libs.androidx.navigation.ui.ktx)
+//    implementation ("androidx.compose.material:material-icons-core:1.8.3")
+//    implementation ("androidx.compose.material:material-icons-extended:1.8.3")
+//    implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
+//    implementation("androidx.compose.material3:material3:1.3.2")
+//    implementation("androidx.compose.material3:material3-window-size-class:1.3.2")
+//    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.4.0-alpha16")
+//    testImplementation(libs.junit)
+//    androidTestImplementation(libs.androidx.junit)
+//    androidTestImplementation(libs.androidx.espresso.core)
+//    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+//    implementation ("androidx.activity:activity-ktx:1.9.0")
+//    implementation("androidx.activity:activity-compose:1.10.1") // For Composable Activities
+//    implementation("androidx.compose.foundation:foundation:1.8.3")
+//
+//}
